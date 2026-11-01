@@ -124,8 +124,8 @@ footer{font-size:13px;color:var(--muted)}
   <div class="legend" aria-label="Legend">
     <span><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" stroke="var(--plan)" stroke-width="3" stroke-linecap="round"/></svg>Plan</span>
     <span><svg width="34" height="10"><path d="M0 3 C12 3 14 8 34 8" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/></svg>Your actual path</span>
-    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--ok)"/></svg>On time (within 10 min)</span>
-    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--late)"/></svg>Late (dips deeper the later it was)</span>
+    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--ok)"/></svg>On time (at or before planned time)</span>
+    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--late)"/></svg>Late (any delay; dips deeper the later it was)</span>
     <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--miss)"/></svg>Missed</span>
     <span><svg width="14" height="14"><circle cx="7" cy="7" r="4.5" fill="var(--surface)" stroke="var(--plan)" stroke-width="2"/></svg>Not logged yet</span>
   </div>
@@ -162,7 +162,7 @@ footer{font-size:13px;color:var(--muted)}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 <script>
 (function(){
-const GRACE = 10;           // minutes late still counted as on time
+const GRACE = 0;            // any minute after the planned time counts as late
 const W = 1200, L = 28, R = 28;
 const ROW_H = 92, PLAN_Y = 26, MISS_Y = 76;
 const LS_KEY = 'daytracks.v1';
