@@ -108,6 +108,11 @@ input{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1
 select.tplpick{font:inherit;font-size:13px;font-weight:600;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:3px 6px;cursor:pointer}
 select.tplpick:hover{border-color:var(--accent)}
 .rulercap{position:sticky;left:0;width:max-content;padding:0 24px;font-size:12px;color:var(--muted)}
+.danger{border-color:color-mix(in srgb,var(--miss) 55%,var(--line));color:var(--miss)}
+.danger:hover:not(:disabled){border-color:var(--miss)!important;color:var(--miss)!important}
+.danger.armed{background:var(--miss);border-color:var(--miss);color:var(--surface)}
+.danger.armed:hover:not(:disabled){color:var(--surface)!important}
+.mini{font-size:12px;padding:2px 9px;border-radius:7px}
 footer{font-size:13px;color:var(--muted)}
 @media (max-width:520px){ body{padding:20px 14px 48px} h1{font-size:25px} }
 @media (prefers-reduced-motion:no-preference){ .apath{transition:d .3s} }
@@ -167,6 +172,18 @@ footer{font-size:13px;color:var(--muted)}
       <button id="discardPlan" hidden>Discard changes</button>
       <button id="savePlan" class="primary">Save template</button>
     </div>
+  </section>
+
+  <section class="planbox" aria-labelledby="dataTitle">
+    <h2 id="dataTitle">Delete entries</h2>
+    <p class="note">This removes what you logged on those days and syncs to all your devices. Your plan templates are kept. It can’t be undone, so download a backup first if you might want the entries back. To clear one day, use <strong>Clear day</strong> beside its date; to clear one milestone, click it and choose <strong>Clear</strong>.</p>
+    <div class="tplmeta">
+      <label for="delFrom">From</label><input type="date" id="delFrom">
+      <label for="delTo">To</label><input type="date" id="delTo">
+      <button id="delRange" class="danger">Delete entries in this range</button>
+      <button id="delAll" class="danger">Delete all entries</button>
+    </div>
+    <p class="note" id="delMsg" aria-live="polite"></p>
   </section>
 
   <footer class="planhead">
@@ -434,7 +451,7 @@ function exampleDay(k){
   });
   return {log, example:true};
 }
-function hasRealDays(){ return Object.keys(state.days).some(k => { const l = state.days[k].log; return l && Object.keys(l).length; }); }
+function hasRealDays(){ return Object.keys(state.days).length > 0; }  // examples only before you've ever logged anything
 function dayData(k){
   if(state.days[k]) return state.days[k];
   if(!hasRealDays() && k < todayKey() && k >= addDays(todayKey(), -6)) return exampleDay(k);
@@ -540,7 +557,7 @@ function render(){
       ${isToday?'<span class="chip today">Today</span>':''}${d.example?'<span class="chip">Example</span>':''}
       ${d.example ? '' : `<select class="tplpick" data-k="${k}" aria-label="Plan template for ${esc(prettyDate(k))}">${state.templates.map(t=>`<option value="${esc(t.id)}"${t.id===tplFor(k).id?' selected':''}>${esc(t.name)}${t.id===state.defaultTpl && t.name.toLowerCase()!=='default'?' (default)':''}</option>`).join('')}</select>`}
       <span class="pill ${band(st.score)}">${st.score===null?'–':st.score+'%'}</span>
-      <span class="counts">${counts}</span></div>
+      <span class="counts">${counts}</span>${!d.example && st.logged ? `<button class="mini danger" data-clearday="${k}" aria-label="Clear all entries for ${esc(prettyDate(k))}">Clear day</button>` : ""}</div>
       ${rowSVG(k,xs,t0,t1)}</div>`;
   });
   document.getElementById('boardInner').innerHTML = html;
@@ -650,7 +667,11 @@ function hitActivate(g){
   const row = g.closest('.row'); if(row && row.classList.contains('ex')) return;
   openPop(g.dataset.k, g.dataset.id, g);
 }
-board.addEventListener('click', ev=>{ const g = ev.target.closest('.hit'); if(g) hitActivate(g); });
+board.addEventListener('click', ev=>{
+  const c = ev.target.closest('[data-clearday]');
+  if(c){ armOrRun(c, 'Click again to clear', () => clearDays([c.dataset.clearday])); return; }
+  const g = ev.target.closest('.hit'); if(g) hitActivate(g);
+});
 board.addEventListener('keydown', ev=>{ const g = ev.target.closest('.hit'); if(g && (ev.key==='Enter'||ev.key===' ')){ ev.preventDefault(); hitActivate(g); } });
 
 /* ---------- nav ---------- */
@@ -730,6 +751,48 @@ document.getElementById('savePlan').onclick = ()=>{
   const tk = todayKey();
   if(state.days[tk] && tplFor(tk).id === t.id){ const d = clone(state.days[tk]); d.plan = clone(t.items); state.days[tk] = d; saveDoc('d-'+tk, d); }
   draft = null; renderPlan(); render();
+};
+
+/* ---------- deleting entries ---------- */
+// A cleared day is saved as an empty log (not removed), so the deletion syncs like any other change
+// and other devices replace their copy instead of uploading the old entries again.
+function loggedKeys(){ return Object.keys(state.days).filter(k => { const l = state.days[k].log; return l && Object.keys(l).length; }).sort(); }
+function clearDays(keys){
+  keys.forEach(k => { if(state.days[k]){ state.days[k] = {log:{}}; saveDoc('d-'+k, state.days[k]); } });
+  closePop(); render();
+}
+// Two-step confirm: first click arms the button, second click runs. Disarms after 6 s.
+function armOrRun(btn, armedText, run){
+  if(btn.dataset.armed === 'yes'){ btn.dataset.armed = ''; btn.classList.remove('armed'); run(); return; }
+  btn.dataset.orig = btn.dataset.orig || btn.textContent;
+  btn.dataset.armed = 'yes'; btn.classList.add('armed'); btn.textContent = armedText;
+  clearTimeout(btn._t); btn._t = setTimeout(() => { btn.dataset.armed = ''; btn.classList.remove('armed'); btn.textContent = btn.dataset.orig; }, 6000);
+}
+const delFrom = document.getElementById('delFrom'), delTo = document.getElementById('delTo'), delMsg = document.getElementById('delMsg');
+delFrom.value = addDays(todayKey(), -6); delTo.value = todayKey();
+const plural = n => n + ' day' + (n === 1 ? '' : 's');
+function disarm(btn){ if(btn.dataset.armed){ clearTimeout(btn._t); btn.dataset.armed = ''; btn.classList.remove('armed'); btn.textContent = btn.dataset.orig; } }
+[delFrom, delTo].forEach(i => i.addEventListener('input', () => disarm(document.getElementById('delRange'))));
+document.getElementById('delRange').onclick = ev => {
+  const b = ev.currentTarget; let f = delFrom.value, t = delTo.value;
+  if(!f || !t){ delMsg.textContent = 'Choose both a start and an end date.'; return; }
+  if(f > t){ [f, t] = [t, f]; }
+  const keys = loggedKeys().filter(k => k >= f && k <= t);
+  if(!keys.length){ disarm(b); delMsg.textContent = 'Nothing is logged between ' + prettyDate(f) + ' and ' + prettyDate(t) + '.'; return; }
+  armOrRun(b, 'Delete ' + plural(keys.length) + '? Click again', () => {
+    clearDays(keys); b.textContent = b.dataset.orig;
+    delMsg.textContent = 'Deleted entries for ' + plural(keys.length) + ' (' + prettyDate(keys[0]) + ' – ' + prettyDate(keys[keys.length-1]) + ').';
+  });
+  if(b.dataset.armed) delMsg.textContent = '';
+};
+document.getElementById('delAll').onclick = ev => {
+  const b = ev.currentTarget, keys = loggedKeys();
+  if(!keys.length){ disarm(b); delMsg.textContent = 'There are no logged entries to delete.'; return; }
+  armOrRun(b, 'Delete all ' + plural(keys.length) + '? Click again', () => {
+    clearDays(keys); b.textContent = b.dataset.orig;
+    delMsg.textContent = 'Deleted all entries (' + plural(keys.length) + '). Your templates are kept.';
+  });
+  if(b.dataset.armed) delMsg.textContent = '';
 };
 
 /* ---------- backup ---------- */
