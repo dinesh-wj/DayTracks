@@ -81,7 +81,7 @@ input{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1
 .pitem button{padding:6px 9px;color:var(--muted)}
 .note{font-size:13px;color:var(--muted)}
 .save-status{font-size:13px;color:var(--muted)}
-#pop{position:fixed;z-index:10;width:290px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:14px;display:none;flex-direction:column;gap:10px}
+#pop{position:fixed;z-index:10;width:320px;max-width:calc(100vw - 20px);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:14px;display:none;flex-direction:column;gap:10px}
 #pop.open{display:flex}
 #pop h3{font-size:17px}
 #pop .meta{font-size:13px;color:var(--muted);margin-top:-6px}
@@ -89,6 +89,7 @@ input{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1
 #pop .grid button{width:100%}
 #pop .at{display:flex;gap:6px;align-items:center}
 #pop .at input{flex:1}
+#pop .sm{display:block;font-weight:500;font-size:12px;opacity:.75}
 #pop label{font-size:13px;color:var(--muted)}
 .b-ok{border-color:var(--ok)!important;color:var(--ok)!important}
 .b-miss{border-color:var(--miss)!important;color:var(--miss)!important}
@@ -117,7 +118,7 @@ footer{font-size:13px;color:var(--muted)}
   <div class="top">
     <div>
       <h1>Day Tracks</h1>
-      <p class="sub">Each day is a line of milestones. Your actual path rides the line when you hit a milestone on time, dips below it when you're late, and drops to the bottom lane when you miss one. Click any milestone to log it.</p>
+      <p class="sub">Each day is a line of milestones. Each milestone is tracked by its start time. Your actual path rides the line when you start on time, dips below it when you start late, and drops to the bottom lane when you miss one. Click any milestone to log it.</p>
     </div>
     <div class="nav">
       <button id="prev" aria-label="Show the previous 7 days">‹ Earlier</button>
@@ -134,9 +135,9 @@ footer{font-size:13px;color:var(--muted)}
   <div class="legend" aria-label="Legend">
     <span><svg width="34" height="10"><line x1="0" y1="5" x2="34" y2="5" stroke="var(--plan)" stroke-width="3" stroke-linecap="round"/></svg>Plan</span>
     <span><svg width="34" height="10"><path d="M0 3 C12 3 14 8 34 8" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/></svg>Your actual path</span>
-    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--ok)"/></svg>On time (at or before planned time)</span>
-    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--late)"/></svg>Late (any delay; dips deeper the later it was)</span>
-    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--miss)"/></svg>Missed</span>
+    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--ok)"/></svg>Started on time (at or before planned start)</span>
+    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--late)"/></svg>Started late (dips deeper the later it was)</span>
+    <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--miss)"/></svg>Missed (didn’t start)</span>
     <span><svg width="14" height="14"><circle cx="7" cy="7" r="4.5" fill="var(--surface)" stroke="var(--plan)" stroke-width="2"/></svg>Not logged yet</span>
   </div>
 
@@ -501,9 +502,9 @@ function rowSVG(k, xs, t0, t1){
   }
   nodes.forEach(n=>{
     const {it,e,px,ax,ay,color} = n;
-    let tip = `${it.name} · planned ${fmt12(toMin(it.t))}`;
-    if(e.k==='ok') tip += ` · done ${fmt12(e.at)}`;
-    if(e.k==='late') tip += ` · done ${fmt12(e.at)} (${e.d} min late)`;
+    let tip = `${it.name} · planned start ${fmt12(toMin(it.t))}`;
+    if(e.k==='ok') tip += ` · started ${fmt12(e.at)}`;
+    if(e.k==='late') tip += ` · started ${fmt12(e.at)} (${e.d} min late)`;
     if(e.k==='miss') tip += ' · missed';
     if(e.k==='none') tip += ' · not logged';
     s += `<g class="hit" data-k="${k}" data-id="${esc(it.id)}" ${data.example?'':'tabindex="0" role="button"'} aria-label="${esc(tip)}"><title>${esc(tip)}</title>`;
@@ -585,23 +586,23 @@ function openPop(k, id, anchor){
   const pm = toMin(it.t);
   const defT = entry && entry.t ? entry.t : (isToday && nm>pm ? toHHMM(nm) : it.t);
   let cur = 'Not logged yet';
-  if(entry){ const e = evalItem(it, entry); cur = e.k==='miss' ? 'Logged as missed' : e.k==='ok' ? `Logged on time at ${fmt12(e.at)}` : `Logged ${e.d} min late at ${fmt12(e.at)}`; }
+  if(entry){ const e = evalItem(it, entry); cur = e.k==='miss' ? 'Logged as missed (didn’t start)' : e.k==='ok' ? `Started on time at ${fmt12(e.at)}` : `Started ${e.d} min late at ${fmt12(e.at)}`; }
   pop.innerHTML = `<h3 id="popTitle">${esc(it.name)}</h3>
-    <div class="meta">Planned ${fmt12(pm)} · ${esc(prettyDate(k))}<br>${cur}</div>
+    <div class="meta">Planned start ${fmt12(pm)} · ${esc(prettyDate(k))}<br>${cur}</div>
     <div class="grid">
-      <button data-a="ontime" class="b-ok">Done on time</button>
-      ${isToday?`<button data-a="now">Done now (${fmt12(nm)})</button>`:'<button data-a="miss" class="b-miss">Missed it</button>'}
+      <button data-a="ontime" class="b-ok">Started on time</button>
+      ${isToday?`<button data-a="now">Started now <small class="sm">${fmt12(nm)}</small></button>`:'<button data-a="miss" class="b-miss">Didn’t start</button>'}
     </div>
-    <label for="popTime">Or done at a specific time</label>
+    <label for="popTime">Or started at a specific time</label>
     <div class="at"><input type="time" id="popTime" value="${defT}"><button data-a="at">Save</button></div>
     <div class="grid">
-      ${isToday?'<button data-a="miss" class="b-miss">Missed it</button>':''}
+      ${isToday?'<button data-a="miss" class="b-miss">Didn’t start</button>':''}
       <button data-a="clear">Clear</button>
       ${isToday?'':'<button data-a="close">Close</button>'}
     </div>`;
   popCtx = {k,id,anchor};
   pop.classList.add('open');
-  const r = anchor.getBoundingClientRect(); const pw = 290, ph = pop.offsetHeight;
+  const r = anchor.getBoundingClientRect(); const pw = pop.offsetWidth, ph = pop.offsetHeight;
   let left = r.left + r.width/2 - pw/2; left = Math.max(10, Math.min(left, window.innerWidth - pw - 10));
   let top = r.bottom + 6; if(top + ph > window.innerHeight - 10) top = Math.max(10, r.top - ph - 6);
   pop.style.left = left+'px'; pop.style.top = top+'px';
