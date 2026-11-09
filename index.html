@@ -499,19 +499,23 @@ function rowSVG(k, xs, t0, t1){
   if(ps.length) s += `<line x1="${xs(Math.min(...ps))}" y1="${PLAN_Y}" x2="${xs(Math.max(...ps))}" y2="${PLAN_Y}" stroke="var(--plan)" stroke-width="4" stroke-linecap="round"/>`;
   if(isToday){ const nm = nowMin(); if(nm>=t0 && nm<=t1){ const x=xs(nm); s += `<line x1="${x}" y1="6" x2="${x}" y2="${ROW_H-4}" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${x+4}" y="${ROW_H-6}" font-size="10" fill="var(--accent)" font-weight="600">now</text>`; } }
 
-  const pts = []; const nodes = [];
+  // The path follows the plan order and never moves backwards in time.
+  // A missed milestone is placed just after whatever you logged before it: if Wake up started an hour late
+  // and Yoga (planned inside that hour) was missed, the miss sits after Wake up, not back at Yoga's planned time.
+  const GAP = 26;                                   // px between consecutive markers that would otherwise stack
+  const pts = []; const nodes = []; let lastX = null;
   [...plan].sort((a,b)=>toMin(a.t)-toMin(b.t)).forEach(it=>{
     const e = evalItem(it, log[it.id]); const px = xs(toMin(it.t));
     let ax = px, ay = PLAN_Y, color = null;
     if(e.k==='ok'){ ax = xs(e.at); color = 'var(--ok)'; }
     else if(e.k==='late'){ ax = xs(e.at); ay = PLAN_Y + 10 + Math.min(e.d,90)/90*30; color = 'var(--late)'; }
     else if(e.k==='miss'){ ay = MISS_Y; color = 'var(--miss)'; }
-    if(e.k!=='none') pts.push([ax,ay]);
+    if(e.k!=='none'){
+      if(lastX !== null) ax = Math.max(ax, lastX + GAP);
+      lastX = ax; pts.push([ax,ay]);
+    }
     nodes.push({it,e,px,ax,ay,color});
   });
-  // Draw the path in the order things actually happened (done time, or planned time for a miss),
-  // so a late milestone that ran past later ones doesn't make the line double back.
-  pts.sort((p,q) => p[0] - q[0]);
   if(pts.length){
     let d = `M${pts[0][0]} ${pts[0][1]}`;
     for(let i=1;i<pts.length;i++){ const [a,b]=pts[i-1], [c,e]=pts[i]; const m=(c-a)/2; d += ` C${a+m} ${b} ${c-m} ${e} ${c} ${e}`; }
@@ -527,6 +531,7 @@ function rowSVG(k, xs, t0, t1){
     s += `<g class="hit" data-k="${k}" data-id="${esc(it.id)}" ${data.example?'':'tabindex="0" role="button"'} aria-label="${esc(tip)}"><title>${esc(tip)}</title>`;
     s += `<rect x="${px-11}" y="6" width="22" height="${ROW_H-12}" fill="transparent"/>`;
     if(e.k==='late') s += `<line x1="${px}" y1="${PLAN_Y}" x2="${ax}" y2="${ay}" stroke="var(--late)" stroke-width="1.3" stroke-dasharray="2 3"/>`;
+    if(e.k==='miss' && ax - px > 1) s += `<line x1="${px}" y1="${PLAN_Y}" x2="${ax}" y2="${ay}" stroke="var(--miss)" stroke-opacity=".55" stroke-width="1.3" stroke-dasharray="2 3"/>`;
     s += `<circle class="ring" cx="${px}" cy="${PLAN_Y}" r="5" fill="var(--surface)" stroke="var(--plan)" stroke-width="2"/>`;
     if(color){
       s += `<circle cx="${ax}" cy="${ay}" r="12" fill="transparent"/>`;
