@@ -209,6 +209,7 @@ footer{font-size:13px;color:var(--muted)}
     <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--late)"/></svg>Started late (dips deeper the later it was)</span>
     <span><svg width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="var(--miss)"/></svg>Missed (didn’t start)</span>
     <span><svg width="14" height="14"><circle cx="7" cy="7" r="4.5" fill="var(--surface)" stroke="var(--plan)" stroke-width="2"/></svg>Not logged yet</span>
+    <span><svg width="64" height="12" aria-hidden="true"><defs><linearGradient id="flowLegend"><stop offset="0" stop-color="rgb(142,151,168)"/><stop offset=".25" stop-color="rgb(96,165,214)"/><stop offset=".5" stop-color="rgb(38,184,166)"/><stop offset=".75" stop-color="rgb(46,148,232)"/><stop offset="1" stop-color="rgb(124,77,255)"/></linearGradient></defs><rect x="0" y="1" width="64" height="10" rx="3" fill="url(#flowLegend)"/></svg>Flow block: short → 2 hr+</span>
   </div>
 
   <div class="banner" id="banner" hidden></div>
@@ -961,6 +962,22 @@ function renderFlow(){
 }
 
 /* flow blocks on the timeline */
+// Block colour follows its length: dull grey for a short block, warming through blue and teal
+// to a vivid violet at 2 hours (the top of the scale; longer blocks stay violet).
+const FLOW_MAX_MIN = 120;
+const FLOW_STOPS = [[0,[142,151,168]], [30,[96,165,214]], [60,[38,184,166]], [90,[46,148,232]], [120,[124,77,255]]];
+function flowRGB(sec){
+  const m = Math.min(FLOW_MAX_MIN, Math.max(0, sec/60));
+  for(let i = 1; i < FLOW_STOPS.length; i++){
+    const [m0,c0] = FLOW_STOPS[i-1], [m1,c1] = FLOW_STOPS[i];
+    if(m <= m1){ const t = (m-m0)/(m1-m0); return c0.map((v,j)=>Math.round(v + (c1[j]-v)*t)); }
+  }
+  return FLOW_STOPS[FLOW_STOPS.length-1][1];
+}
+const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+const shade = (c, f) => c.map(v => Math.round(v*f));
+const lum = c => (0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2]) / 255;
+
 const FLOW_Y = ROW_H - 26, FLOW_H = 14;
 function flowBandSVG(k, xs, t0, t1){
   const x0 = xs(t0); let s = '';
@@ -972,8 +989,11 @@ function flowBandSVG(k, xs, t0, t1){
     const nd = evs.filter(e=>e.k==='d').length, nw = evs.length - nd;
     const tip = `${f.live?'Flow in progress':'Flow'} · ${fmtClock(f.s)} – ${fmtClock(f.s+f.dur)} · ${fmtDur(f.dur)} · ${nd} distraction${nd===1?'':'s'}, ${nw} win${nw===1?'':'s'}`;
     s += `<g class="fblk" data-k="${k}" data-f="${esc(f.id)}" tabindex="0" role="button" aria-label="${esc(tip)}"><title>${esc(tip)}</title>`;
-    s += `<rect x="${bx}" y="${FLOW_Y}" width="${bw}" height="${FLOW_H}" rx="3" fill="var(--flow)" fill-opacity="${f.live?.35:.55}" stroke="var(--flow)" stroke-width="1.2" ${f.live?'stroke-dasharray="4 3"':''}/>`;
-    if(bw > 64) s += `<text x="${bx+5}" y="${FLOW_Y+FLOW_H-3.5}" font-size="10" font-weight="600" fill="var(--ink)" pointer-events="none">${esc(fmtDur(f.dur))}</text>`;
+    // Each block is inset 1.5px on both sides and outlined in a darker shade of its own colour,
+    // so two blocks recorded back to back show a clear gap and edge between them.
+    const c = flowRGB(f.dur), rx = bx + 1.5, rw = Math.max(3, bw - 3);
+    s += `<rect x="${rx}" y="${FLOW_Y}" width="${rw}" height="${FLOW_H}" rx="3" fill="${rgb(c)}" fill-opacity="${f.live?.6:.95}" stroke="${rgb(shade(c,.62))}" stroke-width="1.6" ${f.live?'stroke-dasharray="4 3"':''}/>`;
+    if(rw > 64) s += `<text x="${rx+5}" y="${FLOW_Y+FLOW_H-3.5}" font-size="10" font-weight="700" fill="${lum(c) > .55 ? '#141722' : '#FFFFFF'}" pointer-events="none">${esc(fmtDur(f.dur))}</text>`;
     s += '</g>';
   });
   // distraction (red) and win (gold) marks, including ones logged outside a block
