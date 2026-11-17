@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Day Tracks</title>
+<script>try{ const t = localStorage.getItem('daytracks.theme'); if(t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); }catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -158,6 +159,7 @@ footer{font-size:13px;color:var(--muted)}
       <span class="range" id="range"></span>
       <button id="next" aria-label="Show the next 7 days">Later ›</button>
       <button id="gotoday">Today</button>
+      <button id="themeBtn" aria-pressed="false" title="Switch between light and dark">Dark mode</button>
     </div>
   </div>
 
@@ -591,22 +593,38 @@ function rowSVG(k, xs, t0, t1){
   s += flowBandSVG(k, xs, t0, t1);
 
   // The path follows the plan order and never moves backwards in time.
-  // A missed milestone is placed just after whatever you logged before it: if Wake up started an hour late
-  // and Yoga (planned inside that hour) was missed, the miss sits after Wake up, not back at Yoga's planned time.
-  const GAP = 26;                                   // px between consecutive markers that would otherwise stack
-  const pts = []; const nodes = []; let lastX = null;
+  // Missed milestones sit after whatever you logged before them, and before the next one you
+  // logged (and, today, before "now"). A run of misses that doesn't fit is spread evenly in that gap.
+  const GAP = 26;                                   // preferred px between neighbouring markers
+  const nowX = isToday ? xs(Math.min(Math.max(nowMin(), t0), t1)) : Infinity;
+  const nodes = [];
   [...plan].sort((a,b)=>toMin(a.t)-toMin(b.t)).forEach(it=>{
     const e = evalItem(it, log[it.id]); const px = xs(toMin(it.t));
     let ax = px, ay = PLAN_Y, color = null;
     if(e.k==='ok'){ ax = xs(e.at); color = 'var(--ok)'; }
     else if(e.k==='late'){ ax = xs(e.at); ay = PLAN_Y + 10 + Math.min(e.d,90)/90*30; color = 'var(--late)'; }
     else if(e.k==='miss'){ ay = MISS_Y; color = 'var(--miss)'; }
-    if(e.k!=='none'){
-      if(lastX !== null) ax = Math.max(ax, lastX + GAP);
-      lastX = ax; pts.push([ax,ay]);
-    }
     nodes.push({it,e,px,ax,ay,color});
   });
+  const logged = nodes.filter(n => n.e.k !== 'none');
+  for(let i = 0; i < logged.length; ){
+    if(logged[i].e.k !== 'miss'){                   // started (on time or late): stays at its real time
+      if(i > 0) logged[i].ax = Math.max(logged[i].ax, logged[i-1].ax + 4);
+      i++; continue;
+    }
+    let j = i; while(j < logged.length && logged[j].e.k === 'miss') j++;   // misses i..j-1
+    const run = logged.slice(i, j), n = run.length;
+    const lo = i > 0 ? logged[i-1].ax : -Infinity;
+    const hi = Math.min(j < logged.length ? logged[j].ax : Infinity, nowX);
+    let prev = lo;
+    run.forEach(m => { m.ax = Math.max(m.px, isFinite(prev) ? prev + GAP : -Infinity); prev = m.ax; });
+    if(isFinite(hi) && run[n-1].ax > hi - (j < logged.length ? GAP : 6)){
+      const left = isFinite(lo) ? lo : Math.min(run[0].px, hi - GAP*n);
+      if(hi - left > 8) run.forEach((m,q) => { m.ax = left + (hi - left)*(q+1)/(n+1); });
+    }
+    i = j;
+  }
+  const pts = logged.map(n => [n.ax, n.ay]);
   if(pts.length){
     let d = `M${pts[0][0]} ${pts[0][1]}`;
     for(let i=1;i<pts.length;i++){ const [a,b]=pts[i-1], [c,e]=pts[i]; const m=(c-a)/2; d += ` C${a+m} ${b} ${c-m} ${e} ${c} ${e}`; }
@@ -1163,6 +1181,19 @@ document.getElementById('delAll').onclick = ev => {
   });
   if(b.dataset.armed) delMsg.textContent = '';
 };
+
+/* ---------- light / dark ---------- */
+const themeBtn = document.getElementById('themeBtn');
+const isDark = () => { const t = document.documentElement.getAttribute('data-theme'); return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; };
+function syncThemeBtn(){ const d = isDark(); themeBtn.textContent = d ? 'Light mode' : 'Dark mode'; themeBtn.setAttribute('aria-pressed', String(d)); }
+themeBtn.onclick = () => {
+  const next = isDark() ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try{ localStorage.setItem('daytracks.theme', next); }catch(e){}
+  syncThemeBtn();
+};
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncThemeBtn);
+syncThemeBtn();
 
 /* ---------- backup ---------- */
 document.getElementById('exportBtn').onclick = ()=>{
